@@ -14,11 +14,14 @@ Created on Mon Feb 21 02:18:16 2022
 import numpy as np
 import pandas as pd
 import itertools
+import shelve
+import pickle
+
 
 from LinUCB                 import LinUCB
 from LinUCB_boot            import LinUCB_boot
-from generate_theta         import theta
-from generate_common_paras  import B, feature_d, K, sample_size, linucb_alpha, Repeats
+## from generate_theta         import theta
+## from generate_common_paras  import B, feature_d, K, sample_size, linucb_alpha, Repeats
 
 
 def get_all_combination_bern(feature_d):
@@ -26,7 +29,7 @@ def get_all_combination_bern(feature_d):
 
 
 
-def save_contextual_results():
+def save_contextual_results( theta, feature_d, K, sample_size, linucb_alpha ):
     while True:
         context_bandits = LinUCB(theta=theta, linucb_alpha=linucb_alpha, feature_d=feature_d, K=K, sample_size=sample_size)
         (est_theta, output_reward, ba, X) = context_bandits.run()
@@ -85,9 +88,9 @@ def save_contextual_results():
     return est_theta, dd_total
 
 
-def run_boot_exp():
+def run_boot_exp(theta,  B, feature_d, K, sample_size, linucb_alpha, Repeats):
     
-    (est_theta, dd_total) = save_contextual_results()
+    (est_theta, dd_total) = save_contextual_results(theta, feature_d, K, sample_size, linucb_alpha )
     ###################################################################
     est_theta_total = dict.fromkeys(range(K))
     XTX_det_total = dict.fromkeys(range(K))
@@ -100,11 +103,15 @@ def run_boot_exp():
         
         boot_bandits = LinUCB_boot(theta=theta, linucb_alpha=linucb_alpha,
                                       feature_d=feature_d, K=K, sample_size=sample_size, dd_total=dd_total)
+
         (est_theta, output_reward, ba, X) = boot_bandits.run()
         
         for k in range(K):
             est_theta_total[k][b,:] = est_theta[k]
             XTX_det_total[k][b] = np.linalg.det(np.dot(X[k].T,X[k]))
+
+        if(b%100==0):
+            print("The number of bootstrap is: %d.", b)
             
     
     ######################################################################
@@ -123,7 +130,8 @@ def run_boot_exp():
     
     return bias_list
     
-def run_multi_boot_exp():
+def run_multi_boot_exp(theta,  B, feature_d, K, sample_size, linucb_alpha, Repeats):
+    
     bias_dict = dict.fromkeys((range(K)))
     bias_summary = np.zeros((K,feature_d))
     std_summary = np.zeros((K,feature_d))
@@ -132,7 +140,7 @@ def run_multi_boot_exp():
         bias_dict[k] = np.zeros((Repeats,feature_d))
         
     for r in range(Repeats):
-        bias_list = run_boot_exp()
+        bias_list = run_boot_exp(theta,  B, feature_d, K, sample_size, linucb_alpha, Repeats)
         for k in range(K):
             bias_dict[k][r,:] = bias_list[k]
             
@@ -140,17 +148,49 @@ def run_multi_boot_exp():
     for k in range(K):
         bias_summary[k,:] = np.mean(bias_dict[k], axis=0)
         std_summary[k,:] = np.std(bias_dict[k], axis=0)
-    return bias_summary, std_summary
+   
+    return bias_dict, bias_summary, std_summary
+
+
+linucb_alpha = 1.25
+sample_size  = 100
+B            = 500
+feature_d    = 2
+# try smaller Repeats to double check code
+Repeats      = 2
+#K: #of arms
+K            = 2 
+
+
+theta0s=[1.8,2.8]
+
+theta    = dict.fromkeys(range(K))
+
+theta[0] = np.array([1.8,2.2])
+theta[1] = np.array([2,2])
+
+result_all = list()
+
+for i in range(2):
+    theta[0][0]=theta0s[i]
+    
+    (bias_dict, bias_summary, std_summary) = run_multi_boot_exp(theta, B, feature_d, K, sample_size, linucb_alpha, Repeats)
+    
+    result_all.append(bias_dict)
+    result_all.append(bias_summary)
+    result_all.append(std_summary)
 
 
 
-(bias_summary, std_summary) = run_multi_boot_exp()
+with open('result.pkl','w') as f:
+    pickle.dump( [result_all, theta, B, feature_d, K, sample_size, linucb_alpha, Repeats], f )
 
-avg_output_ot_b = pd.DataFrame(bias_summary)
-avg_output_ot_b.to_csv("LinUCB_resample_bias" + ".csv")
 
-avg_output_ot_s = pd.DataFrame(std_summary)
-avg_output_ot_s.to_csv("LinUCB_resample_bias_std" + ".csv")
+# avg_output_ot_b = pd.DataFrame(bias_summary)
+# avg_output_ot_b.to_csv("LinUCB_resample_bias" + ".csv")
+
+# avg_output_ot_s = pd.DataFrame(std_summary)
+# avg_output_ot_s.to_csv("LinUCB_resample_bias_std" + ".csv")
 
 
 
