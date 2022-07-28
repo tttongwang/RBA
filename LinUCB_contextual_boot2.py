@@ -182,7 +182,7 @@ for i in range(2):
 
 
 
-with open('result.pkl','w') as f:
+with open("result/result_RBA_"+".pkl",'w') as f:
     pickle.dump( [result_all, theta, B, feature_d, K, sample_size, linucb_alpha, Repeats], f )
 
 
